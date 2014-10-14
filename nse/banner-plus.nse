@@ -25,7 +25,7 @@ local nsedebug = require "nsedebug"
 ---
 -- Script is executed for any TCP port.
 portrule = function( host, port )
-  return port.protocol == "tcp"
+  return port.protocol == "tcp" or (port.protocol == "udp" and port.number == 5060)
 end
 
 
@@ -100,6 +100,7 @@ function grab_banner(host, port)
   local st, buff, banner
   local pnum = port.number
   local probe = "GET / HTTP/1.1\r\nHost: www\r\nAccept: */*\r\nUser-Agent: Mozilla/5.0 (Windows NT 6.1; WOW64; rv:12.0) Gecko/20100101 Firefox/12.0\r\n\r\n"
+  local sipprobe = "OPTIONS sip:nm SIP/2.0\r\nVia: SIP/2.0/UDP nm;branch=foo;rport\r\nFrom: <sip:nm@nm>;tag=root\r\nTo: <sip:nm2@nm2>\r\nCall-ID: 50000\r\nCSeq: 42 OPTIONS\r\nMax-Forwards: 70\r\nContent-Length: 0\r\nContact: <sip:nm@nm>\r\nAccept: application/sdp\r\n\r\n"
 
   local proto  = "tcp"
   local socket = nmap.new_socket()  
@@ -109,6 +110,8 @@ function grab_banner(host, port)
   
   if pnum == 443 then
     proto = "ssl"
+  elseif pnum == 5060 and port.protocol == "udp" then
+    proto = "udp"
   end  
   
   st = socket:connect(host, port, proto)
@@ -142,7 +145,11 @@ function grab_banner(host, port)
   
   -- Send a probe if no banner was recieved
   if not st then
-    socket:send(probe)
+    if pnum == 5060 then
+      socket:send(sipprobe)
+    else
+      socket:send(probe)
+    end
     probe_sent = 1  
     st, buff = socket:receive_bytes(1)
     if st then
